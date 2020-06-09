@@ -1,11 +1,9 @@
 package com.dune.game.core;
-
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
-import com.dune.game.core.units.BattleTank;
-import com.dune.game.core.units.Harvester;
+
 
 public class BattleMap {
     private class Cell {
@@ -54,17 +52,23 @@ public class BattleMap {
         }
     }
 
-    public static final int COLUMNS_COUNT = 16;
-    public static final int ROWS_COUNT = 9;
+    public static final int COLUMNS_COUNT = 20;
+    public static final int ROWS_COUNT = 12;
     public static final int CELL_SIZE = 80;
+    public static final int MAP_WIDTH_PX = COLUMNS_COUNT * CELL_SIZE;
+    public static final int MAP_HEIGHT_PX = ROWS_COUNT * CELL_SIZE;
 
     private TextureRegion grassTexture;
     private TextureRegion resourceTexture;
+    private TextureRegion dischargeTexture;
+    private Vector2 positionDischarge;
     private Cell[][] cells;
 
     public BattleMap() {
+        this.positionDischarge = new Vector2(MathUtils.random(100, 1400), MathUtils.random(100, 1000));
         this.grassTexture = Assets.getInstance().getAtlas().findRegion("grass");
         this.resourceTexture = Assets.getInstance().getAtlas().findRegion("resource");
+        this.dischargeTexture = Assets.getInstance().getAtlas().findRegion("dischargearea");
         this.cells = new Cell[COLUMNS_COUNT][ROWS_COUNT];
         for (int i = 0; i < COLUMNS_COUNT; i++) {
             for (int j = 0; j < ROWS_COUNT; j++) {
@@ -76,19 +80,11 @@ public class BattleMap {
     public int getResourceCount(Vector2 point) {
         int cx = (int) (point.x / CELL_SIZE);
         int cy = (int) (point.y / CELL_SIZE);
-        if(cx < 0 || cx > 16 || cy < 0 || cy > 9){
-            return 0;
-        } else {
-            return cells[cx][cy].resource;
-        }
+        return cells[cx][cy].resource;
     }
 
-    public int getResourceCount(int cx, int cy) {
-        if(cx < 0 || cx > 16 || cy < 0 || cy > 9){
-            return 0;
-        } else {
-            return cells[cx][cy].resource;
-        }
+    public Vector2 getPositionDischarge() {
+        return positionDischarge;
     }
 
     public int harvestResource(Vector2 point, int power) {
@@ -112,6 +108,7 @@ public class BattleMap {
                 cells[i][j].render(batch);
             }
         }
+        batch.draw(dischargeTexture, positionDischarge.x - 37, positionDischarge.y - 17);
     }
 
     public void update(float dt) {
