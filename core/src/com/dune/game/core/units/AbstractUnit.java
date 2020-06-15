@@ -1,199 +1,155 @@
-package com.dune.game.core.units;
+package com.dune.game.core;
+
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
-import com.dune.game.core.*;
+import com.dune.game.screens.utils.Assets;
 
-public abstract class AbstractUnit extends GameObject implements Poolable, Targetable {
-    protected UnitType unitType;
-    protected Owner ownerType;
-    protected Weapon weapon;
+public class BattleMap {
+    private class Cell {
+        private Building buildingEntrance;
+        private int cellX, cellY;
+        private int resource;
+        private float resourceRegenerationRate;
+        private float resourceRegenerationTime;
+        private boolean groundPassable;
 
-    protected Vector2 destination;
-    protected TextureRegion[] textures;
-    protected TextureRegion weaponTexture;
-
-    protected TextureRegion progressbarTexture;
-    protected int hp;
-    protected int hpMax;
-    protected float angle;
-    protected float speed;
-    protected float rotationSpeed;
-
-    protected float moveTimer;
-    protected float lifeTime;
-    protected float timePerFrame;
-    protected int container;
-    protected int containerCapacity;
-
-    protected Targetable target;
-    protected float minDstToActiveTarget;
-
-    @Override
-    public TargetType getType() {
-        return TargetType.UNIT;
-    }
-
-    public boolean takeDamage(int damage) {
-        if (!isActive()) {
-            return false;
-        }
-        hp -= damage;
-        if (hp <= 0) {
-            return true;
-        }
-        return false;
-    }
-
-    public UnitType getUnitType() {
-        return unitType;
-    }
-
-    public Weapon getWeapon() {
-        return weapon;
-    }
-
-    public int getContainer() {
-        return container;
-    }
-
-    public void setContainer(int container) {
-        this.container = container;
-    }
-
-    public void moveBy(Vector2 value) {
-        boolean stayStill = false;
-        if (position.dst(destination) < 3.0f) {
-            stayStill = true;
-        }
-        position.add(value);
-        if (stayStill) {
-            destination.set(position);
-        }
-    }
-
-    public Owner getOwnerType() {
-        return ownerType;
-    }
-
-    @Override
-    public boolean isActive() {
-        return hp > 0;
-    }
-
-    public AbstractUnit(GameController gc) {
-        super(gc);
-        this.progressbarTexture = Assets.getInstance().getAtlas().findRegion("progressbar");
-        this.timePerFrame = 0.08f;
-        this.rotationSpeed = 90.0f;
-    }
-
-    public abstract void setup(Owner ownerType, float x, float y);
-
-    private int getCurrentFrameIndex() {
-        return (int) (moveTimer / timePerFrame) % textures.length;
-    }
-
-    public void update(float dt) {
-        lifeTime += dt;
-        // Если у танка есть цель, он пытается ее атаковать
-        if (target != null) {
-            destination.set(target.getPosition());
-            if (position.dst(target.getPosition()) < minDstToActiveTarget) {
-                destination.set(position);
+        public Cell(int cellX, int cellY) {
+            this.cellX = cellX;
+            this.cellY = cellY;
+            if (MathUtils.random() < 0.1f) {
+                resource = MathUtils.random(1, 3);
             }
+            resourceRegenerationRate = MathUtils.random(5.0f) - 4.5f;
+            if (resourceRegenerationRate < 0.0f) {
+                resourceRegenerationRate = 0.0f;
+            } else {
+                resourceRegenerationRate *= 100.0f;
+                resourceRegenerationRate += 50.0f;
+            }
+            this.groundPassable = true;
         }
-        // Если танку необходимо доехать до какой-то точки, он работает в этом условии
-        if (position.dst(destination) > 3.0f) {
-            float angleTo = tmp.set(destination).sub(position).angle();
-            angle = rotateTo(angle, angleTo, rotationSpeed, dt);
-            moveTimer += dt;
 
-            if (gc.getMap().getResourceCount(position) > 0) {
-                for (int i = 0; i < gc.getMap().getResourceCount(position); i++) {
-                    gc.getParticleController().setup(MathUtils.random(getCellX() * 80, getCellX() * 80 + 80), MathUtils.random(getCellY() * 80, getCellY() * 80 + 80), MathUtils.random(-20, 20), MathUtils.random(-20, 20), 0.3f, 0.5f, 0.4f,
-                            0, 0, 1, 0.1f, 1, 1, 1, 0.4f);
+        private void update(float dt) {
+            if (resourceRegenerationRate > 0.01f) {
+                resourceRegenerationTime += dt;
+                if (resourceRegenerationTime > resourceRegenerationRate) {
+                    resourceRegenerationTime = 0.0f;
+                    resource++;
+                    if (resource > 5) {
+                        resource = 5;
+                    }
                 }
             }
+        }
 
-            tmp.set(speed, 0).rotate(angle);
-            position.mulAdd(tmp, dt);
-            if (position.dst(destination) < 120.0f && Math.abs(angleTo - angle) > 10) {
-                position.mulAdd(tmp, -dt);
+        private void render(SpriteBatch batch) {
+            if (resource > 0) {
+                float scale = 0.5f + resource * 0.2f;
+                batch.draw(resourceTexture, cellX * CELL_SIZE, cellY * CELL_SIZE, CELL_SIZE / 2, CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, scale, scale, 0.0f);
+            } else {
+                if (resourceRegenerationRate > 0.01f) {
+                    batch.draw(resourceTexture, cellX * CELL_SIZE, cellY * CELL_SIZE, CELL_SIZE / 2, CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0.1f, 0.1f, 0.0f);
+                }
             }
         }
-        updateWeapon(dt);
-        checkBounds();
+
+        public void blockGroundPass() {
+            groundPassable = false;
+            resourceRegenerationRate = 0.0f;
+            resource = 0;
+        }
+
+        public void unblockGroundPass() {
+            groundPassable = true;
+        }
     }
 
-    public void commandMoveTo(Vector2 point) {
-        destination.set(point);
-        target = null;
+    public static final int COLUMNS_COUNT = 24;
+    public static final int ROWS_COUNT = 16;
+    public static final int CELL_SIZE = 60;
+    public static final int MAP_WIDTH_PX = COLUMNS_COUNT * CELL_SIZE;
+    public static final int MAP_HEIGHT_PX = ROWS_COUNT * CELL_SIZE;
+
+    private TextureRegion grassTexture;
+    private TextureRegion resourceTexture;
+    private Cell[][] cells;
+
+    public void blockGroundCell(int cellX, int cellY) {
+        cells[cellX][cellY].blockGroundPass();
     }
 
-    public abstract void commandAttack(Targetable target);
+    public void unblockGroundCell(int cellX, int cellY) {
+        cells[cellX][cellY].unblockGroundPass();
+    }
 
-    public abstract void updateWeapon(float dt);
+    public void setupBuildingEntrance(int cellX, int cellY, Building building) {
+        cells[cellX][cellY].buildingEntrance = building;
+    }
 
-    public void checkBounds() {
-        if (position.x < 40) {
-            position.x = 40;
+    public BattleMap() {
+        this.grassTexture = Assets.getInstance().getAtlas().findRegion("grass");
+        this.resourceTexture = Assets.getInstance().getAtlas().findRegion("resource");
+        this.cells = new Cell[COLUMNS_COUNT][ROWS_COUNT];
+        for (int i = 0; i < COLUMNS_COUNT; i++) {
+            for (int j = 0; j < ROWS_COUNT; j++) {
+                cells[i][j] = new Cell(i, j);
+            }
         }
-        if (position.y < 40) {
-            position.y = 40;
+    }
+
+    public boolean isCellGroundPassable(Vector2 position) {
+        int cellX = (int) (position.x / BattleMap.CELL_SIZE);
+        int cellY = (int) (position.y / BattleMap.CELL_SIZE);
+        if (cellX < 0 || cellY < 0 || cellX >= COLUMNS_COUNT || cellY >= ROWS_COUNT) {
+            return false;
         }
-        if (position.x > BattleMap.MAP_WIDTH_PX - 40) {
-            position.x = BattleMap.MAP_WIDTH_PX - 40;
+        return cells[cellX][cellY].groundPassable;
+    }
+
+    public int getResourceCount(Vector2 point) {
+        int cx = (int) (point.x / CELL_SIZE);
+        int cy = (int) (point.y / CELL_SIZE);
+        return cells[cx][cy].resource;
+    }
+
+    public int getResourceCount(int cx, int cy) {
+        return cells[cx][cy].resource;
+    }
+
+    public int harvestResource(Vector2 point, int power) {
+        int value = 0;
+        int cx = (int) (point.x / CELL_SIZE);
+        int cy = (int) (point.y / CELL_SIZE);
+        if (cells[cx][cy].resource >= power) {
+            value = power;
+            cells[cx][cy].resource -= power;
+        } else {
+            value = cells[cx][cy].resource;
+            cells[cx][cy].resource = 0;
         }
-        if (position.y > BattleMap.MAP_HEIGHT_PX - 40) {
-            position.y = BattleMap.MAP_HEIGHT_PX - 40;
-        }
+        return value;
     }
 
     public void render(SpriteBatch batch) {
-        float c = 1.0f;
-        float r = 0.0f;
-        if (gc.isUnitSelected(this)) {
-            c = 0.7f + (float) Math.sin(lifeTime * 8.0f) * 0.3f;
-        }
-        if (ownerType == Owner.AI) {
-            r = 0.4f;
-        }
-        batch.setColor(c, c - r, c - r, 1.0f);
-        batch.draw(textures[getCurrentFrameIndex()], position.x - 40, position.y - 40, 40, 40, 80, 80, 1, 1, angle);
-
-        batch.draw(weaponTexture, position.x - 40, position.y - 40, 40, 40, 80, 80, 1, 1, weapon.getAngle());
-
-        batch.setColor(1, 1, 1, 1);
-        renderGui(batch);
-    }
-
-    public void renderGui(SpriteBatch batch) {
-        if (hp < hpMax) {
-            batch.setColor(0.2f, 0.2f, 0.0f, 1.0f);
-            batch.draw(progressbarTexture, position.x - 32, position.y + 30, 64, 12);
-            batch.setColor(0.0f, 1.0f, 0.0f, 1.0f);
-            float percentage = (float) hp / hpMax;
-            batch.draw(progressbarTexture, position.x - 30, position.y + 32, 60 * percentage, 8);
-            batch.setColor(1.0f, 1.0f, 1.0f, 1.0f);
-        }
-    }
-
-    public float rotateTo(float srcAngle, float angleTo, float rSpeed, float dt) {
-        if (Math.abs(srcAngle - angleTo) > 3.0f) {
-            if ((srcAngle > angleTo && Math.abs(srcAngle - angleTo) <= 180.0f) || (srcAngle < angleTo && Math.abs(srcAngle - angleTo) > 180.0f)) {
-                srcAngle -= rSpeed * dt;
-            } else {
-                srcAngle += rSpeed * dt;
+        for (int i = 0; i < COLUMNS_COUNT; i++) {
+            for (int j = 0; j < ROWS_COUNT; j++) {
+                batch.draw(grassTexture, i * CELL_SIZE, j * CELL_SIZE);
+                cells[i][j].render(batch);
             }
         }
-        if (srcAngle < 0.0f) {
-            srcAngle += 360.0f;
+    }
+
+    public void update(float dt) {
+        for (int i = 0; i < COLUMNS_COUNT; i++) {
+            for (int j = 0; j < ROWS_COUNT; j++) {
+                cells[i][j].update(dt);
+            }
         }
-        if (srcAngle > 360.0f) {
-            srcAngle -= 360.0f;
-        }
-        return srcAngle;
+    }
+
+    public Building getBuildingEntrance(int cellX, int cellY) {
+        return cells[cellX][cellY].buildingEntrance;
     }
 }
